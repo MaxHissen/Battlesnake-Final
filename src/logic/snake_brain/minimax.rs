@@ -30,19 +30,19 @@ pub fn minimax(state : State) -> u8{
 
     loop{
         depth += 1;
-        best_move = opps(state.clone(), 0, depth, 0, 0, 0xFFFFFFFF, true);
-        //break; //is depth 1?
-        if (Instant::now() - start_time).as_millis() > 20 || depth >= 50{
+        best_move = opps(state.clone(), 0, depth, 0, 0, 0xFFFFFFFF, true, start_time);
+        //break; //break if depth = 1?
+        if (Instant::now() - start_time).as_millis() > 100 || depth > 50{
             break;
         }
     }
-    println!("calculated with depth: {:?}", depth);
+    println!("depth: {:?}", depth);
 
     //state_handler::print_state(&state);
     return best_move.1;
 }
 
-fn opps(mut state: State, mut depth: u8, max_depth: u8, mut player: u8, mut alpha: u32, mut beta: u32, first_time: bool) -> (u32, u8) {
+fn opps(mut state: State, mut depth: u8, max_depth: u8, mut player: u8, mut alpha: u32, mut beta: u32, first_time: bool, start_time: std::time::Instant) -> (u32, u8) {
     //state_handler::print_state(&state);
     
     // If back to beginning
@@ -51,6 +51,7 @@ fn opps(mut state: State, mut depth: u8, max_depth: u8, mut player: u8, mut alph
         depth += 1;
         if !first_time {
             state_handler::end_turn(&mut state);
+            //println!("{:?}", state.original_board_struct);
 
             if state.are_snakes_alive[0] && !state.are_snakes_alive[1]{
                 return (0xFFFFFFFF, 4);
@@ -62,13 +63,13 @@ fn opps(mut state: State, mut depth: u8, max_depth: u8, mut player: u8, mut alph
                 return (0x7FFFFFFF, 4);
             }
         }
+    }
 
-        // If max depth
-        if depth >= max_depth {
-            let mut value = state_handler::state_value(&state, &0);
-            //println!("value {:?}", value);
-            return (value, 4);
-        }
+    // If max depth
+    if depth >= max_depth {
+        let mut value = state_handler::state_value(&state, &0);
+        //println!("value {:?}", value);
+        return (value, 4);
     }
 
 
@@ -79,18 +80,22 @@ fn opps(mut state: State, mut depth: u8, max_depth: u8, mut player: u8, mut alph
     }
     let mut best_move_direction = 4;
 
-    let move_order = get_move_order(&state, &player);
+    let mut move_order = vec![0, 1, 2, 3];
+    if depth > 1{
+        move_order = get_move_order(&state, &player);
+    }
     //println!("{:?}", move_order);
 
     for move_direction in move_order {
-        //println!("move direction: {:?}", move_direction);
+
         let mut state_copy = state.clone();
         let move_struct = move_direction + (player << 2);
 
         state_handler::make_move(&mut state_copy, &move_struct);
         //don't copy state if unnecessary
-        let mut score = opps(state_copy.clone(), depth, max_depth, player + 1, alpha, beta, false).0;
+        let mut score = opps(state_copy.clone(), depth, max_depth, player + 1, alpha, beta, false, start_time).0;
 
+        //println!("{:?} {:?} {:?}", move_direction, player, score);
         if score < 0x10000000{
             score += depth as u32
         }
