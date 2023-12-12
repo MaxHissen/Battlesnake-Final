@@ -14,11 +14,12 @@ pub struct State {
     pub snake_heads : [(u8, u8); 2],
     pub are_snakes_alive : [bool; 2],
     pub turn : u16,
+    pub original_board_struct: [[u8; SIZE]; SIZE],
 }
 
 
 
-pub fn initialize_board_struct_for_position(board_struct : &mut [[u8; SIZE]; SIZE], snake_lengths : &mut [u8; 2], snake_healths : &mut [u8; 2], snake_heads : &mut [(u8, u8); 2], are_snakes_alive : &mut [bool; 2], board: &Board, you: &Battlesnake){
+pub fn initialize_board_struct_for_position(board_struct : &mut [[u8; SIZE]; SIZE], snake_lengths : &mut [u8; 2], snake_healths : &mut [u8; 2], snake_heads : &mut [(u8, u8); 2], are_snakes_alive : &mut [bool; 2], board: &Board, you: &Battlesnake, original_board_struct : &mut [[u8; SIZE]; SIZE]){
     
     
     //get important values from game
@@ -50,6 +51,7 @@ pub fn initialize_board_struct_for_position(board_struct : &mut [[u8; SIZE]; SIZ
                 to_add += (snake_index<<7) as u8;
 
                 board_struct[y_pos][x_pos] = to_add;
+                original_board_struct[y_pos][x_pos] = 2;
             }
 
 
@@ -59,6 +61,7 @@ pub fn initialize_board_struct_for_position(board_struct : &mut [[u8; SIZE]; SIZ
             let head_y = head.y as u8;
 
             snake_heads[snake_index] = (head_x, head_y);
+            original_board_struct[head_y as usize][head_x as usize] = 2;
 
             snake_index += 1;
         }
@@ -77,6 +80,7 @@ pub fn initialize_board_struct_for_position(board_struct : &mut [[u8; SIZE]; SIZ
         let to_add = (body_length - i) as u8;
 
         board_struct[y_pos][x_pos] = to_add;
+        original_board_struct[y_pos][x_pos] = 1;
     }
 
 
@@ -85,6 +89,7 @@ pub fn initialize_board_struct_for_position(board_struct : &mut [[u8; SIZE]; SIZ
     let head_x = head.x as u8;
     let head_y = head.y as u8;
     snake_heads[0] = (head_x, head_y);
+    original_board_struct[head_y as usize][head_x as usize] = 1;
 
 
     //add in food
@@ -269,6 +274,9 @@ pub fn end_turn(state: &mut State){
 
 
 pub fn state_value(state: &State, player: &u8) -> u32{
+
+
+    //criticallity 1
     if state.are_snakes_alive[0] && !state.are_snakes_alive[1]{
         return 0xFFFFFFFF;
     }
@@ -279,161 +287,124 @@ pub fn state_value(state: &State, player: &u8) -> u32{
         return 0x7FFFFFFF;
     }
 
+    let mut score : u32 = 0x80000000;
+
+    //criticallity 2
+    let mut crit_2_score : u32 = 0;
 
 
-    let mut value : u32 = 0x80000000;
+    let (area_control_amount, food_distances, can_see_my_tail) = area_control_score::get_area_control_score(state, &0, false);
 
+    //score += area_control_value(state, player) as u32;
+    crit_2_score += (in_centre_value(state, player) as u32) / 10;
+    crit_2_score += (enemy_at_edge_value(state, &(1-*player)) as u32) / 10;
+    crit_2_score += (area_control_value(area_control_amount, player) as u32);
+    crit_2_score += state.snake_healths[*player as usize] as u32 / 15;
 
-
-    //area control score
-    let me_area = area_control_score::get_area_control_score(state, player).0 as u32;
-    value += me_area;
-
-
-    if state.turn >= 200{
-        //enemy chasing tail score
-        let tail_position : (u8, u8) = get_tail_position(state, &(1 - player));
-        //println!("{:?}", tail_position);
-        let dx = (tail_position.0 as i8 - state.snake_heads[1 - *player as usize].0 as i8).abs() as i8;
-        let dy = (tail_position.1 as i8 - state.snake_heads[1 - *player as usize].1 as i8).abs() as i8;
-        value += (SIZE as i8*2+1 - std::cmp::max((dx + dy)^(2), SIZE as i8*2+1)) as u32;
-    }
-
-
-    if state.turn >= 150{
-        //giving no room for enemy score
-        value += next_to_enemy_score(state, player);
+    if state.snake_lengths[0] + state.snake_lengths[1] >= (SIZE*SIZE/3) as u8{
+        //endgame
+        let (body_area_control_amount, _, _) = area_control_score::get_area_control_score(state, &0, true);
+        crit_2_score += (body_area_control_value(area_control_amount, player) as u32);
+        crit_2_score += can_reach_my_tail_score(can_see_my_tail) as u32 / 10;
     }
 
 
 
-    let hungry = state.snake_healths[*player as usize] < 30 || state.turn < 200 || state.snake_lengths[*player as usize] < 20;
-    if hungry && *player == 0{
-        if state.snake_healths[*player as usize] < 30{
-            value -= 10;
-        }
-        value += (size_value(state, player) + near_food_score(state, player));
-    }
+    //criticallity 3
+    let mut crit_3_score : u32 = 0;
+    crit_3_score += state.snake_healths[1 - *player as usize] as u32 / 30;
     
-    return value as u32;
+    
+    score += crit_2_score + crit_3_score;
+    return score as u32;
+}
 
-    fn get_tail_position(state : &State, player : &u8) -> (u8, u8){
-        let mut tail_x = 11;
-        let mut tail_y = 11;
-        let mut smallest_seen = (SIZE*2+1) as u8;
-        
-        for y in 0..SIZE{
-            for x in 0..SIZE{
-                let cell_value = state.board_struct[y][x];
-                if cell_value != 0b11111111{
-                    if (cell_value&0b10000000) >> 7 == *player{
-                        if (cell_value&0b01111111) < smallest_seen{
-                            smallest_seen = cell_value&0b01111111;
-                            tail_x = x as u8;
-                            tail_y = y as u8;
-                        }
-                    }
-                }
+
+
+
+
+fn matches_original_struct_value(state : &State, player : &u8) -> u8{
+    let mut amount_matching : u16 = 0;
+    for y in 0..SIZE{
+        for x in 0..SIZE{
+            if (state.board_struct[y][x]&0b10000000) >> 7 == 1 - *player && state.original_board_struct[y][x] == (1 - *player) + 1{
+                amount_matching += 1;
             }
         }
+    }
+    return ((amount_matching * 100) / state.snake_lengths[1 - *player as usize] as u16) as u8;
+}
+fn area_control_value(area_control_amount : u8, player : &u8) -> u8{
+    //returns how much space player has to work with
+    //(0 - 100)
 
-        return (tail_x, tail_y);
-    }
-    fn area_control_value(state : &State, player : &u8) -> u32{
-        let (area_control_value, food_distances) = area_control_score::get_area_control_score(state, &0);
-        return area_control_value as u32;
-    }
-    fn close_to_head_value(state : &State, player : &u8) -> u32{
-        let mut head_distance_x = state.snake_heads[0].0 as i8 - state.snake_heads[1].0 as i8;
-        if head_distance_x < 0{
-            head_distance_x *= -1;
-        }
+    
+    let value = (((area_control_amount as u16 * 100) / (SIZE * SIZE) as u16)) as u8;
 
-        let mut head_distance_y = state.snake_heads[0].1 as i8 - state.snake_heads[1].1 as i8;
-        if head_distance_y < 0{
-            head_distance_y *= -1;
-        }
-        let head_distance = head_distance_x + head_distance_y;
+    assert!(value <= 100 && value >= 0);
+    return value;
+}
+fn body_area_control_value(area_control_amount : u8, player : &u8) -> u8{
+    //returns how much space player has to work with
+    //(0 - 100)
 
-        return (SIZE as i32*2 - head_distance as i32) as u32;
-    }
-    fn size_value(state : &State, player : &u8) -> u32{
-        return state.snake_lengths[0] as u32 * SIZE as u32*9;
-    }
-    fn inside_head_value(state : &State, player : &u8) -> u32{
-        return (state.snake_heads[0] == state.snake_heads[1]) as u32
-    }
-    fn near_food_score(state : &State, player : &u8) -> u32{
-        //if hungry
-        let mut value : u16 = SIZE as u16*5;
-        let distances = area_control_score::get_area_control_score(state, &0).1;
-        if distances[0].len() > 0{
-            value -= (distances[0][0] as u16) * 2;
-        }
+    
+    let value = (((area_control_amount as u16 * 100) / (SIZE * SIZE) as u16)) as u8;
 
+    assert!(value <= 100 && value >= 0);
+    return value;
+}
+fn can_reach_my_tail_score(can_reach_me_tail : bool) -> u8{
+    if can_reach_me_tail{
+        return 100;
 
-        let mut smallest_distance : i8 = SIZE as i8*2;
-        for y in 0..SIZE{
-            for x in 0..SIZE{
-                if state.board_struct[y][x] == 0b11111111{
-                    let distance = (state.snake_heads[0].0 as i8 - x as i8).abs() + (state.snake_heads[0].1 as i8 - y as i8).abs() as i8;
-                    if distance < smallest_distance{
-                        smallest_distance = distance;
-                    }
-                }
-            }
-        }
-        value -= smallest_distance as u16;
-        return value as u32;
     }
-    fn head_near_centre_score(state : &State, player : &u8) -> u32{
-        let distance = ((SIZE/2+1) as i8 - state.snake_heads[0].0 as i8).abs() + ((SIZE/2+1) as i8 - state.snake_heads[0].1 as i8).abs();
-        return ((SIZE/2+1) as i8 - distance) as u32;
-    }
-    fn head_at_edge_score(state : &State, player : &u8) -> u32{
-        let mut score = 0;
-        if state.snake_heads[0].0 == 0{
-            score -= 1;
-        }
-        if state.snake_heads[0].1 == 0{
-            score -= 1;
-        }
-        if state.snake_heads[0].0 == SIZE as u8-1{
-            score -= 1;
-        }
-        if state.snake_heads[0].1 == SIZE as u8-1{
-            score -= 1;
-        }
-        return score as u32;
-    }
-    fn next_to_enemy_score(state : &State, player : &u8) -> u32{
-        let head_x = state.snake_heads[1-*player as usize].0 as usize;
-        let head_y = state.snake_heads[1-*player as usize].1 as usize;
+    return 0;
+}
+fn in_centre_value(state : &State, player : &u8) -> u8{
+    
+    let x_pos : u8 = state.snake_heads[*player as usize].0;
+    let y_pos : u8 = state.snake_heads[*player as usize].1;
 
-        let mut score = 0;
-        if head_y < SIZE-1{
-            if state.board_struct[head_y + 1][head_x]&0b10000000 > 0{
-                score += 1;
-            }
-        }
-        if head_y > 0{
-            if state.board_struct[head_y - 1][head_x]&0b10000000 > 0{
-                score += 1;
-            }
-        }
-        if head_x > 0{
-            if state.board_struct[head_y][head_x - 1]&0b10000000 > 0{
-                score += 1;
-            }
-        }
-        if head_x < SIZE-1{
-            if state.board_struct[head_y][head_x + 1]&0b10000000 > 0{
-                score += 1;
-            }
-        }
+    let x_dist : u8 = ((x_pos as i8 - (SIZE as i8-1)/2).abs()) as u8;
+    let y_dist : u8 = ((y_pos as i8 - (SIZE as i8-1)/2).abs()) as u8;
 
-        return score as u32;
+    if x_dist <= 2 && y_dist <= 2{
+        return 100;
     }
+    if x_dist <= 3 && y_dist <= 3{
+        return 85;
+    }
+    if x_dist <= 4 && y_dist <= 4{
+        return 50;
+    }
+    if x_dist <= 5 && y_dist <= 5{
+        return 0;
+    }
+    return 0;
+}
+fn enemy_at_edge_value(state : &State, player : &u8) -> u8{
+    //input enemy snake
+
+    let x_pos : u8 = state.snake_heads[*player as usize].0;
+    let y_pos : u8 = state.snake_heads[*player as usize].1;
+
+    let x_dist : u8 = ((x_pos as i8 - (SIZE as i8-1)/2).abs()) as u8;
+    let y_dist : u8 = ((y_pos as i8 - (SIZE as i8-1)/2).abs()) as u8;
+
+    if x_dist <= 2 && y_dist <= 2{
+        return 0;
+    }
+    if x_dist <= 3 && y_dist <= 3{
+        return 30;
+    }
+    if x_dist <= 4 && y_dist <= 4{
+        return 65;
+    }
+    if x_dist <= 5 && y_dist <= 5{
+        return 100;
+    }
+    return 0;
 }
 
 pub fn print_state(state: &State){
@@ -457,4 +428,5 @@ pub fn print_state(state: &State){
         }
         println!("");
     }
-    println!("");}
+    println!("");
+}
