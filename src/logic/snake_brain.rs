@@ -15,8 +15,9 @@ pub fn calculate_direction(turn: &u32, board: &Board, you: &Battlesnake) -> Stri
     let mut snake_heads : [(u8, u8); 2] = [(SIZE as u8, SIZE as u8); 2];
     let mut are_snakes_alive : [bool; 2] = [true, false];
     let turn = *turn as u16;
-    state_handler::initialize_board_struct_for_position(&mut board_struct, &mut snake_lengths, &mut snake_healths, &mut snake_heads, &mut are_snakes_alive, board, you);
-    let mut state = State{board_struct, snake_lengths, snake_healths, snake_heads, are_snakes_alive, turn};
+    let mut original_board_struct: [[u8; SIZE]; SIZE] = [[0; SIZE]; SIZE];
+    state_handler::initialize_board_struct_for_position(&mut board_struct, &mut snake_lengths, &mut snake_healths, &mut snake_heads, &mut are_snakes_alive, board, you, &mut original_board_struct);
+    let mut state = State{board_struct, snake_lengths, snake_healths, snake_heads, are_snakes_alive, turn, original_board_struct};
     
     //state_handler::print_state(&state);
 
