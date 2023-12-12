@@ -32,7 +32,7 @@ pub fn minimax(state : State) -> u8{
         depth += 1;
         best_move = opps(state.clone(), 0, depth, 0, 0, 0xFFFFFFFF, true, start_time);
         //break; //break if depth = 1?
-        if (Instant::now() - start_time).as_millis() > 100 || depth > 50{
+        if (Instant::now() - start_time).as_millis() > 30 || depth > 50{
             break;
         }
     }
