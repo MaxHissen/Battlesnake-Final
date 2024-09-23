@@ -1,2 +1,2 @@
-# Scrabble
+# BattleSnake
 
