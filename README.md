@@ -14,5 +14,5 @@ The biggest problem of the engine is a classic one: the horizon problem. I've do
 
 # Current Status
 
-The snake is still online at battlesnake.com, and is under the name "Camo"
+The snake is still online at battlesnake.com, and is under the name "Camo."
 At its peak, it was #4 in the world in duels, but has since dropped off as other snakes have been created.
