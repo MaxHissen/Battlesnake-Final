@@ -4,7 +4,7 @@ Project I worked on last winter. Game involves 2-4 snakes, and last one on the b
 
 # How it works
 
-The board state is represented by a 2d array of int values. first digit is which snake (0 or 1), and then the 7 others encode how much longer before the snake is gone
+The board state is represented by a 2d array of int values. first digit is which snake (0 or 1), and then the 7 others encode how much longer before the snake is gone. Food is represented as 0xFF.
 
 It uses minimax with alpha-beta pruning to remove redundant search paths. Each node is evaluated with floodfill. The main philosophy behind this is to restrict the cells the opponent can reach, thus applying pressure and waiting for a mistake.
 
