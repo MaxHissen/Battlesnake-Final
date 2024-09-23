@@ -11,3 +11,8 @@ It uses minimax with alpha-beta pruning to remove redundant search paths. Each n
 # Limitations
 
 The biggest problem of the engine is a classic one: the horizon problem. I've done a lot to attempt to minimize the negative effects using certain heuristics such as a bias towards the centre and chasing tails, but these have had limited effects.
+
+# Current Status
+
+The snake is still online at battlesnake.com, and is under the name "Camo"
+At its peak, it was #4 in the world in duels, but has since dropped off as other snakes have been created.
